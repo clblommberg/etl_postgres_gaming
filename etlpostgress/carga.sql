@@ -23,7 +23,7 @@ CREATE TABLE indicadores_desarrollo_humano (
 );
 
 COPY indicadores_desarrollo_humano
-FROM '/data/postgres/iseriesdata.csv'
+FROM '/var/lib/postgresql/data/iseriesdata.csv'
 WITH CSV HEADER DELIMITER ',' QUOTE '"';
 
 
@@ -42,7 +42,7 @@ CREATE TABLE console_sales (
 -- Load data from CSV
 
 COPY console_sales (Year, Dato, Console, Company, Sales)
-FROM '/data/postgres/iconsolesales.csv'
+FROM '/var/lib/postgresql/data/iconsolesales.csv'
 WITH CSV HEADER DELIMITER ',' QUOTE '"';
 
 DROP TABLE IF EXISTS world_indicators;
@@ -75,7 +75,7 @@ CREATE TABLE world_indicators (
 
 -- Load data from CSV
 COPY world_indicators
-FROM '/data/postgres/indicadores.csv'
+FROM '/var/lib/postgresql/data/indicadores.csv'
 WITH CSV HEADER DELIMITER ',' QUOTE '"';
 
 
@@ -103,7 +103,7 @@ CREATE TABLE juegos(
 );
 
 COPY juegos
-FROM '/data/postgres/iiijuegosteam.csv'
+FROM '/var/lib/postgresql/data/iiijuegosteam.csv'
 WITH CSV HEADER DELIMITER ',' QUOTE '"';
 
 DROP TABLE IF EXISTS video_games;
@@ -128,5 +128,5 @@ CREATE TABLE video_games (
 );
 
 COPY video_games
-FROM '/data/postgres/ivideosgame.csv'
+FROM '/var/lib/postgresql/data/ivideosgame.csv'
 WITH CSV HEADER DELIMITER ',' QUOTE '"';

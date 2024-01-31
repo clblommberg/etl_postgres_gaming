@@ -1,7 +1,4 @@
 
-
--- SELECT * FROM world_indicators LIMIT 10;
--- Normalizar los nombres de las columnas
 -- TABLA world_indicators
 ALTER TABLE world_indicators 
 RENAME COLUMN "Series Name" TO series_name;
@@ -139,14 +136,6 @@ FROM world_indicators;
 
 -- Nulo (NULL): Sin valor definido, valor desconocido.
 -- Vacío (''): Hay un valor que es una cadena vacía.
-
-SELECT *
-FROM world_indicators
-WHERE series_name IS NULL;
-
-SELECT *
-FROM world_indicators
-WHERE series_code IS NULL;
 
 
 DELETE FROM world_indicators
@@ -344,11 +333,6 @@ SET
   day_j = EXTRACT(DAY FROM release_date);
 
 
-SELECT owners, COUNT(owners) AS num_reg
-FROM juegos
-GROUP BY owners;
-
-
 -- Eliminar la columna fecha
 /*
 ALTER TABLE video_games
@@ -378,12 +362,12 @@ SET tier =
     WHEN POSITION('-' IN owners) > 0 AND LEFT(owners, POSITION('-' IN owners) - 1)::numeric BETWEEN 100000000 AND 200000000 THEN 'tier_1'
     ELSE 'tier_unknown'
   END;
-
+/*
 SELECT
   MAX(year_j) AS max_year_j,
   MIN(year_j) AS min_year_j
 FROM juegos;
-
+*/
 
 -- Tratamiento de video_games 
 
@@ -472,6 +456,7 @@ ALTER COLUMN user_score TYPE NUMERIC(25, 2) USING COALESCE(NULLIF(CAST(user_scor
 ALTER TABLE video_games
 ALTER COLUMN user_count TYPE INTEGER USING COALESCE(NULLIF(CAST(user_count AS INTEGER), 0));
 
+/*
 SELECT
   AVG(na_sales) AS avg_na_sales,
   AVG(eu_sales) AS avg_eu_sales,
@@ -515,13 +500,10 @@ WHERE
   critic_count IS NULL OR
   user_score IS NULL OR
   user_count IS NULL;
-
+*/
 
 
 -- 6704 registros con scores vacios de 16719
-SELECT COUNT(name) AS num_reg
-FROM video_games;
-
 
 SELECT
   MAX(year_of_release) AS max_year,
@@ -601,6 +583,17 @@ SET idlocalidad =
         ELSE NULL
     END;
 
+UPDATE world_indicators
+SET idlocalidad = 
+    CASE
+        WHEN country_name = 'Unión Europea' AND country_code = 'EUU' THEN 2
+        WHEN country_name = 'Mundo' AND country_code = 'WLD' THEN 1
+        WHEN country_name = 'Japón' AND country_code = 'JPN' THEN 4
+        WHEN country_name = 'Estados Unidos' AND country_code = 'USA' THEN 3
+        ELSE NULL
+    END;
+
+
 DROP TABLE IF EXISTS paises;
 -- Crear la nueva tabla
 CREATE TABLE paises (
@@ -621,3 +614,302 @@ VALUES
 ALTER TABLE world_indicators
 DROP COLUMN country_code,
 DROP COLUMN country_name;
+
+
+-- Contar registros para cada desarrollador en la tabla video_games
+WITH video_games_counts AS (
+    SELECT developer, COUNT(*) AS cat_reg
+    FROM video_games
+    GROUP BY developer
+),
+-- Contar registros para cada desarrollador en la tabla juegos
+juegos_counts AS (
+    SELECT developer, COUNT(*) AS cat_reg
+    FROM juegos
+    GROUP BY developer
+)
+-- Unir los resultados de ambas tablas
+SELECT
+    COALESCE(vg.developer, j.developer) AS developer,
+    COALESCE(vg.cat_reg, 0) AS cat_reg_video_games,
+    COALESCE(j.cat_reg, 0) AS cat_reg_juegos
+FROM
+    video_games_counts vg
+FULL OUTER JOIN
+    juegos_counts j ON vg.developer = j.developer;
+
+
+DROP TABLE IF EXISTS developers;
+-- Crear la tabla para desarrolladores normalizados
+CREATE TABLE developers(
+    developer VARCHAR(255)
+);
+
+-- Insertar desarrolladores únicos de video_games
+INSERT INTO developers (developer)
+SELECT DISTINCT developer FROM video_games;
+-- solmente copio 1697
+SELECT COUNT(DISTINCT developer) AS total_developers
+FROM video_games;
+
+SELECT count(developer)
+FROM video_games;
+
+-- Insertar desarrolladores únicos de juegos
+INSERT INTO developers (developer)
+SELECT DISTINCT developer FROM juegos;
+-- solmente copio 17113
+SELECT *  FROM developers LIMIT 20;
+
+-- Añadir columna adicional a la tabla developers
+ALTER TABLE developers ADD COLUMN developer_clean TEXT;
+
+
+-- Actualizar la columna developer_clean con valores normalizados
+UPDATE developers
+SET developer_clean = (
+  SELECT string_agg(distinct d, ',' order by d)
+  FROM (
+    SELECT unnest(string_to_array(developer, ',' )) as d
+  ) s
+);
+
+-- Mostrar los resultados para validar
+SELECT * FROM developers WHERE developer_clean = 'alpixel games';
+
+UPDATE developers
+SET developer_clean = LOWER(TRIM(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(developer_clean, '''', ''), '-', ''), ',', ''), '.',''), ':','')));
+
+
+
+SELECT developer, COUNT(developer) AS cat_reg
+FROM developers
+GROUP BY developer;
+
+SELECT developer_clean, COUNT(developer_clean) AS Mat_reg
+FROM developers
+GROUP BY developer_clean;
+
+
+-- Querys de revisión
+SELECT * FROM developers LIMIT 10;
+
+SELECT 
+    developer_clean,
+    regexp_split_to_table(developer_clean, E'\\s*[,;]\\s*') as word
+FROM developers
+ORDER BY developer_clean;
+
+
+SELECT word, count(*) 
+FROM (
+    SELECT 
+        developer_clean,
+        regexp_split_to_table(developer_clean, E'\\s*[,;]\\s*') as word
+    FROM developers
+) s
+GROUP BY word
+ORDER BY count(*) DESC;
+
+
+-- Normalizar registros
+
+/*
+UPDATE developers
+SET developer_clean = 'alpixel games'
+WHERE POSITION('alpixel games' IN developer_clean) > 0;
+*/
+
+UPDATE developers
+SET developer_clean = 'abstraction games'
+WHERE developer_clean IN ('abstraction games','abstraction games;the bitmap brothers','the bitmap brothers','abstraction games;wayforward','wayforward');
+
+UPDATE developers
+SET developer_clean = 'alawar'  
+WHERE developer_clean IN ('alawar', 'alawar dreamdale', 'alawar entertainment', 'alawar entertainmentalawar entertainment inc', 'alawar entertainment;amegami', 'amegami', 'alawar entertainment;toyman interactive', 'toyman interactive', 'alawar fivebn', 'alawar fridays games','alawar;mirball games','mirball games', 'alawar stargaze','alawar stargaze;alawar entertainment', 'alawar;whalebox studio', 'whalebox studio');
+
+UPDATE developers
+SET developer_clean = '1c company'
+WHERE developer_clean IN ('1c 1c company', '1c 1c companybattlefrontcom', '1c 1c company inoco', '1c 1c companythq', '1c 1c company various');
+
+UPDATE developers 
+SET developer_clean = '3rise'
+WHERE developer_clean IN ('3rise;橘子班','橘子班');
+
+UPDATE developers
+SET developer_clean = '64k barchboi'
+WHERE developer_clean IN ('64k;barchboi', 'barchboi');
+
+UPDATE developers
+SET developer_clean = '7dots'
+WHERE developer_clean IN ('7dots', '7dots;rock frog', 'rock frog');
+
+UPDATE developers
+SET developer_clean = '2d heroes' 
+WHERE developer_clean IN ('2d heroes;ursa games', 'ursa games');
+
+UPDATE developers 
+SET developer_clean = '2k czech'
+WHERE developer_clean IN ('2k czech','2k czech','2k czech;feral interactive (mac)','feral interactive (mac)');
+
+UPDATE developers
+SET developer_clean = '2k marin'
+WHERE developer_clean IN ('2k marin', '2k marin', '2k marin', '2k marin;2k china;digital extremes;2k australia;blind squirrel', '2k china', 'digital extremes', '2k australia', 'blind squirrel', '2k marindigital extremes', '2k marinirrational games');
+
+UPDATE developers
+SET developer_clean = '2xl games'
+WHERE developer_clean IN ('2xl games', '2xl games', '2xl games;blitworks', 'blitworks');
+
+UPDATE developers 
+SET developer_clean = '2play'
+WHERE developer_clean IN ('2play', '2 players', '2play;prasius', 'prasius');
+
+UPDATE developers
+SET developer_clean = '1c game studios'
+WHERE developer_clean IN ('1c game studios;777 studios', '777 studios');
+
+
+UPDATE developers
+SET developer_clean = '10tacle studios'
+WHERE developer_clean IN ('10tacle studios', '10tacle studios fusionsphere systems');
+
+UPDATE developers 
+SET developer_clean = '16 bit psych'
+WHERE developer_clean IN ('16 bit psych;kyle b', 'kyle b');
+
+
+
+--- tabla developers serial
+
+CREATE TABLE developer_mapping (
+  developer_key SERIAL PRIMARY KEY,
+  developer_clean VARCHAR(255) UNIQUE NOT NULL
+);
+
+INSERT INTO developer_mapping (developer_clean)
+SELECT DISTINCT developer_clean
+FROM developers
+WHERE developer_clean IS NOT NULL;
+
+/*
+ALTER TABLE developers
+ADD COLUMN iddeveloper SERIAL PRIMARY KEY;
+ALTER TABLE developers
+DROP COLUMN iddeveloper;
+*/
+
+
+ALTER TABLE developers
+ADD COLUMN developer_key INTEGER;
+
+ALTER TABLE developers
+ADD CONSTRAINT fk_developer_key
+FOREIGN KEY (developer_key) REFERENCES developer_mapping(developer_key);
+
+UPDATE developers
+SET developer_key = developer_mapping.developer_key
+FROM developer_mapping
+WHERE developers.developer_clean = developer_mapping.developer_clean;
+
+
+DELETE FROM developers WHERE developer_key IS NULL;
+
+
+
+--- Tabla juegos
+ALTER TABLE juegos
+ADD COLUMN developer_key INTEGER;
+
+UPDATE juegos AS j
+SET developer_key = d.developer_key
+FROM developers AS d
+WHERE j.developer = d.developer;
+
+ALTER TABLE juegos
+ADD CONSTRAINT fk_developer_key
+FOREIGN KEY (developer_key) REFERENCES developer_mapping(developer_key);
+
+-- video_games
+-- previo
+UPDATE video_games
+SET developer = 'No Clasificado'
+WHERE developer IS NULL OR developer = '';
+
+-- Agregar "No Clasificado" a developer_mapping con un nuevo índice único
+INSERT INTO developer_mapping (developer_clean)
+VALUES ('No Clasificado');
+
+
+-- Ejecutar la función para manejar "No Clasificado"
+SELECT manejar_no_clasificado();
+-- Verificar si "No Clasificado" está en developers y si tiene una clave foránea
+SELECT *
+FROM developers
+WHERE developer = 'No Clasificado';
+
+INSERT INTO developers (developer, developer_clean, developer_key)
+VALUES 
+    ('No Clasificado', 'No Clasificado', 18297);
+
+
+-- Paso 1: Agregar la columna developer_key
+ALTER TABLE video_games
+ADD COLUMN developer_key INTEGER;
+
+-- Paso 2: Actualizar developer_key en video_games usando la tabla developers
+UPDATE video_games AS vg
+SET developer_key = d.developer_key
+FROM developers AS d
+WHERE vg.developer = d.developer;
+
+-- Paso 3: Agregar la restricción de clave foránea
+ALTER TABLE video_games
+ADD CONSTRAINT fk_developer_key
+FOREIGN KEY (developer_key) REFERENCES developer_mapping(developer_key);
+
+
+-- Detalles para juegos eliminar developer  y video_games eliminar developer y para developers eliminar developer_clean
+
+ALTER TABLE juegos
+DROP COLUMN developer;
+
+ALTER TABLE video_games
+DROP COLUMN developer;
+
+ALTER TABLE developers
+DROP COLUMN developer_clean;
+
+ALTER TABLE developer_mapping
+RENAME COLUMN developer_clean TO developer_clasificado;
+
+/*
+CREATE TABLE nueva_video_games AS
+SELECT * FROM video_games;
+
+*/
+
+/*
+UPDATE nueva_video_games AS vg
+SET developer_key = dm.developer_key
+FROM developers AS dm
+WHERE vg.developer = dm.developer;
+*/
+
+SELECT DISTINCT company
+FROM console_sales;
+
+ALTER TABLE console_sales
+ADD COLUMN company_key INTEGER;
+
+UPDATE console_sales
+SET company_key = 
+    CASE 
+        WHEN company = 'Microsoft' THEN 16690
+        WHEN company = 'Nintendo' THEN 11035
+        WHEN company = 'Sony' THEN 964
+    END;
+
+
+ALTER TABLE console_sales
+ADD CONSTRAINT fk_company_key
+FOREIGN KEY (company_key) REFERENCES developer_mapping(developer_key);
