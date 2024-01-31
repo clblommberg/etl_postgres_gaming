@@ -1,3 +1,30 @@
+-- Active: 1706639263610@@127.0.0.1@5433@docker@public
+
+
+CREATE TABLE video_games (
+    Name VARCHAR(255),
+    Platform VARCHAR(50),
+    Year_of_Release VARCHAR(50),
+    Genre VARCHAR(50),
+    Publisher VARCHAR(255),
+    NA_Sales VARCHAR(50),
+    EU_Sales VARCHAR(50),
+    JP_Sales VARCHAR(50),
+    Other_Sales VARCHAR(50),
+    Global_Sales VARCHAR(50),
+    Critic_Score  VARCHAR(50),
+    Critic_Count  VARCHAR(50),
+    User_Score VARCHAR(5),
+    User_Count VARCHAR(50),
+    Developer VARCHAR(255),
+    Rating VARCHAR(5)
+);
+
+COPY video_games
+FROM '/var/lib/postgresql/data/ivideosgame.csv'
+WITH CSV HEADER DELIMITER ',' QUOTE '"';
+
+
 
 -- TABLA world_indicators
 ALTER TABLE world_indicators 
@@ -526,31 +553,7 @@ SELECT * FROM paises LIMIT 5;
 SELECT * FROM calendario LIMIT 5;
 
 
-DROP TABLE IF EXISTS calendario;
--- Crear una tabla de calendario
-CREATE TABLE calendario (
-    fecha DATE,
-    anio INTEGER,
-    mes INTEGER,
-    dia INTEGER,
-    anio_mes VARCHAR(7),
-    trimestre INTEGER,
-    semestre INTEGER,
-    dia_semana INTEGER
-);
 
--- Insert data into the calendario table
-INSERT INTO calendario (fecha, anio, mes, dia, anio_mes, trimestre, semestre, dia_semana)
-SELECT
-    generate_series('1997-01-01'::date, '2025-12-31'::date, '1 day'::interval)::date,
-    EXTRACT(YEAR FROM generate_series),
-    EXTRACT(MONTH FROM generate_series),
-    EXTRACT(DAY FROM generate_series),
-    TO_CHAR(generate_series, 'YYYY-MM'),
-    EXTRACT(QUARTER FROM generate_series),
-    CASE WHEN EXTRACT(MONTH FROM generate_series) <= 6 THEN 1 ELSE 2 END,
-    EXTRACT(ISODOW FROM generate_series)
-FROM generate_series('1997-01-01'::date, '2025-12-31'::date, '1 day'::interval);
 
 -- Verificar las primeras filas de la tabla de calendario
 SELECT COUNT(fecha)
@@ -840,8 +843,7 @@ INSERT INTO developer_mapping (developer_clean)
 VALUES ('No Clasificado');
 
 
--- Ejecutar la función para manejar "No Clasificado"
-SELECT manejar_no_clasificado();
+
 -- Verificar si "No Clasificado" está en developers y si tiene una clave foránea
 SELECT *
 FROM developers
@@ -913,3 +915,264 @@ SET company_key =
 ALTER TABLE console_sales
 ADD CONSTRAINT fk_company_key
 FOREIGN KEY (company_key) REFERENCES developer_mapping(developer_key);
+
+-- parte etl 2 
+-- Agrega una nueva columna como clave primaria
+ALTER TABLE paises
+ADD COLUMN idlocalidad_paises SERIAL PRIMARY KEY;
+
+-- Actualiza los valores de la nueva columna
+UPDATE paises
+SET idlocalidad_paises = idlocalidad;
+
+-- Elimina la columna original si no es necesaria
+ALTER TABLE paises
+DROP COLUMN idlocalidad;
+
+-- Agrega la restricción de la clave foránea
+ALTER TABLE world_indicators
+ADD CONSTRAINT fk_idlocalidad_paises
+FOREIGN KEY (idlocalidad) REFERENCES paises(idlocalidad_paises);
+
+-- total coincidencias 
+SELECT COUNT(*) AS coincidencias
+FROM indicadores_desarrollo_humano idh
+JOIN world_indicators wi ON idh.code = wi.series_code;
+
+
+-- ya voy comprendiendo 
+
+SELECT
+    ih.code AS code_idh,
+    wi.series_code AS series_code_wi,
+    CASE WHEN ih.code = wi.series_code THEN 'Coincide' ELSE 'No Coincide' END AS coincidencia_status
+FROM indicadores_desarrollo_humano ih
+LEFT JOIN world_indicators wi ON ih.code = wi.series_code;
+
+
+CREATE TABLE coincidencias_tabla (
+    id SERIAL PRIMARY KEY,
+    code_idh VARCHAR(255),
+    series_code_wi VARCHAR(255),
+    coincidencia_status VARCHAR(50)
+);
+
+INSERT INTO coincidencias_tabla (code_idh, series_code_wi, coincidencia_status)
+SELECT
+    ih.code AS code_idh,
+    wi.series_code AS series_code_wi,
+    CASE WHEN ih.code = wi.series_code THEN 'Coincide' ELSE 'No Coincide' END AS coincidencia_status
+FROM indicadores_desarrollo_humano ih
+LEFT JOIN world_indicators wi ON ih.code = wi.series_code;
+
+-- Crear la tabla para desarrolladores normalizados
+CREATE TABLE coders (
+    code_names VARCHAR(255)
+);
+
+
+-- Insertar desarrolladores únicos de video_games
+INSERT INTO coders(code_names)
+SELECT DISTINCT code FROM indicadores_desarrollo_humano;
+-- solmente copio 
+
+-- Insertar desarrolladores únicos de juegos
+INSERT INTO coders(code_names)
+SELECT DISTINCT series_code FROM world_indicators;
+-- solmente copio 
+ALTER TABLE coders ADD COLUMN coders_clean TEXT;
+
+UPDATE coders
+SET coders_clean = (
+  SELECT string_agg(distinct d, ',' order by d)
+  FROM (
+    SELECT unnest(string_to_array(code_names, ',' )) as d
+  ) s
+);
+
+SELECT 
+    code_names,
+    regexp_split_to_table(code_names, E'\\s*[,;]\\s*') as word
+FROM coders
+ORDER BY code_names;
+
+--
+
+CREATE TABLE coders_mapping (
+  coders_key SERIAL PRIMARY KEY,
+  coders_clean VARCHAR(255) UNIQUE NOT NULL
+);
+
+INSERT INTO coders_mapping (coders_clean)
+SELECT DISTINCT coders_clean
+FROM coders
+WHERE coders_clean IS NOT NULL;
+
+
+-- coders es la tabla intermedia
+ALTER TABLE coders
+ADD COLUMN coders_key INTEGER;
+
+ALTER TABLE coders
+ADD CONSTRAINT fk_coders_key 
+FOREIGN KEY (coders_key) REFERENCES coders_mapping(coders_key);
+
+UPDATE coders
+SET coders_key = coders_mapping.coders_key
+FROM coders_mapping
+WHERE coders.coders_clean = coders_mapping.coders_clean;
+
+DELETE FROM coders WHERE coders_key IS NULL;
+
+
+ALTER TABLE world_indicators
+ADD COLUMN coders_key INTEGER;
+---previo hay que validar si hay registros vacios en la columna series_name
+/*
+SELECT COUNT(*) 
+FROM world_indicators 
+WHERE series_code IS NULL OR series_code = '';
+*/
+---
+
+
+UPDATE world_indicators AS j
+SET coders_key = d.coders_key
+FROM coders AS d
+WHERE j.series_code = d.code_names;
+
+
+ALTER TABLE world_indicators
+ADD CONSTRAINT fk_coders_key
+FOREIGN KEY (coders_key) REFERENCES coders_mapping(coders_key);
+
+-- realiza el proceso siguiente pero para la tabla indicadores_desarrollo_humano y su columna code
+
+ALTER TABLE indicadores_desarrollo_humano
+ADD COLUMN coders_key INTEGER;
+
+-- Actualizar la columna coders_key con valores normalizados
+UPDATE indicadores_desarrollo_humano AS ih
+SET coders_key = d.coders_key
+FROM coders AS d
+WHERE ih.code = d.code_names;
+
+-- Añadir restricción de clave foránea
+ALTER TABLE indicadores_desarrollo_humano
+ADD CONSTRAINT fk_coders_key
+FOREIGN KEY (coders_key) REFERENCES coders_mapping(coders_key);
+-- tabla calendario
+
+SELECT c.fecha, j.name, j.release_date
+FROM calendario c 
+INNER JOIN juegos j 
+    ON DATE(j.release_date) = c.fecha;
+
+DROP TABLE IF EXISTS calendario;
+
+-- Crear la tabla calendario
+CREATE TABLE calendario (
+    fecha DATE PRIMARY KEY,
+    anio INTEGER,
+    mes INTEGER,
+    dia INTEGER,
+    anio_mes VARCHAR(7),
+    trimestre INTEGER,
+    semestre INTEGER,
+    dia_semana INTEGER
+);
+
+-- Insertar datos en la tabla calendario
+-- Insertar datos en la tabla calendario evitando duplicados
+INSERT INTO calendario (fecha, anio, mes, dia, anio_mes, trimestre, semestre, dia_semana)
+SELECT
+    dates::date,
+    EXTRACT(YEAR FROM dates),
+    EXTRACT(MONTH FROM dates),
+    EXTRACT(DAY FROM dates),
+    TO_CHAR(dates, 'YYYY-MM'),
+    EXTRACT(QUARTER FROM dates),
+    CASE WHEN EXTRACT(MONTH FROM dates) <= 6 THEN 1 ELSE 2 END,
+    EXTRACT(ISODOW FROM dates)
+FROM generate_series('1997-01-01'::date, '2025-12-31'::date, '1 day'::interval) AS dates
+WHERE NOT EXISTS (
+    SELECT 1 FROM calendario WHERE fecha = dates::date
+);
+
+
+-- Agrega la restricción de clave foránea
+ALTER TABLE juegos
+ADD CONSTRAINT fk_release_date
+FOREIGN KEY (release_date) REFERENCES calendario(fecha);
+
+-- Validar llaves primarias
+
+SELECT table_name, column_name, constraint_name
+FROM information_schema.key_column_usage
+WHERE constraint_name LIKE '%_pkey%';
+
+-- validar llaves foraneas
+
+SELECT conname AS foreign_key_name,
+       conrelid::regclass AS table_name,
+       a.attname AS column_name,
+       confrelid::regclass AS referenced_table_name,
+       af.attname AS referenced_column_name
+FROM pg_constraint c
+JOIN pg_attribute a ON a.attnum = ANY(c.conkey)
+JOIN pg_attribute af ON af.attnum = ANY(c.confkey)
+WHERE contype = 'f';
+
+
+-- manejamos como una vista los años para wold_indicators
+CREATE VIEW world_years_unpivoted AS
+SELECT series_name, series_code, '2000' AS year, yr_2000 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2001' AS year, yr_2001 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2002' AS year, yr_2002 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2003' AS year, yr_2003 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2004' AS year, yr_2004 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2005' AS year, yr_2005 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2006' AS year, yr_2006 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2007' AS year, yr_2007 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2008' AS year, yr_2008 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2009' AS year, yr_2009 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2010' AS year, yr_2010 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2011' AS year, yr_2011 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2012' AS year, yr_2012 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2013' AS year, yr_2013 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2014' AS year, yr_2014 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2015' AS year, yr_2015 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2016' AS year, yr_2016 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2017' AS year, yr_2017 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2018' AS year, yr_2018 AS value FROM world_indicators
+UNION ALL
+SELECT series_name, series_code, '2019' AS year, yr_2019 AS value FROM world_indicators;
+
+
+SELECT
+    wi.series_name,
+    wi.series_code,
+    c.fecha,
+    wi.value
+FROM world_years_unpivoted wi
+JOIN calendario c ON wi.year::int = c.anio;
+
+
