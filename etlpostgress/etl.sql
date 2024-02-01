@@ -1,4 +1,29 @@
 
+CREATE TABLE video_games (
+    Name VARCHAR(255),
+    Platform VARCHAR(50),
+    Year_of_Release VARCHAR(50),
+    Genre VARCHAR(50),
+    Publisher VARCHAR(255),
+    NA_Sales VARCHAR(50),
+    EU_Sales VARCHAR(50),
+    JP_Sales VARCHAR(50),
+    Other_Sales VARCHAR(50),
+    Global_Sales VARCHAR(50),
+    Critic_Score  VARCHAR(50),
+    Critic_Count  VARCHAR(50),
+    User_Score VARCHAR(5),
+    User_Count VARCHAR(50),
+    Developer VARCHAR(255),
+    Rating VARCHAR(5)
+);
+
+COPY video_games
+FROM '/var/lib/postgresql/data/ivideosgame.csv'
+WITH CSV HEADER DELIMITER ',' QUOTE '"';
+
+
+
 -- TABLA world_indicators
 ALTER TABLE world_indicators 
 RENAME COLUMN "Series Name" TO series_name;
@@ -1157,4 +1182,31 @@ SET total_global = CASE
                   END;
 
 
+--- graficca 
+SELECT
+    wi.series_name,
+    wi.series_code,
+    c.fecha,
+    wi.value
+FROM world_years_unpivoted wi
+JOIN calendario c ON wi.year::int = c.anio;
 
+
+SELECT * 
+FROM information_schema.tables
+WHERE table_schema = 'public';
+
+SELECT 
+   t.table_name,
+   c.column_name
+FROM information_schema.tables AS t
+INNER JOIN information_schema.columns AS c
+    ON t.table_name = c.table_name
+WHERE t.table_schema = 'public'  
+ORDER BY t.table_name, c.ordinal_position;
+
+SELECT * FROM world_years_unpivoted LIMIT 5;
+
+SELECT * FROM world_indicators LIMIT 5;
+
+SELECT * FROM paises LIMIT 5;

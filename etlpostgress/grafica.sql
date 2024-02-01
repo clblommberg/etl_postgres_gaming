@@ -1,34 +1,4 @@
 
---- graficca 
-SELECT
-    wi.series_name,
-    wi.series_code,
-    c.fecha,
-    wi.value
-FROM world_years_unpivoted wi
-JOIN calendario c ON wi.year::int = c.anio;
-
-
-SELECT * 
-FROM information_schema.tables
-WHERE table_schema = 'public';
-
-SELECT 
-   t.table_name,
-   c.column_name
-FROM information_schema.tables AS t
-INNER JOIN information_schema.columns AS c
-    ON t.table_name = c.table_name
-WHERE t.table_schema = 'public'  
-ORDER BY t.table_name, c.ordinal_position;
-
-SELECT * FROM world_years_unpivoted LIMIT 5;
-
-SELECT * FROM world_indicators LIMIT 5;
-
-SELECT * FROM paises LIMIT 5;
-
-
 -- Vistas para graficas
 CREATE VIEW colmunstables_view AS
 SELECT 
@@ -245,3 +215,93 @@ GROUP BY
   vg.name
 ORDER BY
   ventas_totales DESC;
+
+--- periodo de calendario fecha
+
+SELECT
+  c.fecha AS release_date,
+  COALESCE(SUM(j.positive_ratings), 0) AS total_positive_ratings,
+  COALESCE(SUM(j.negative_ratings), 0) AS total_negative_ratings,
+  (COALESCE(SUM(j.positive_ratings), 0) - COALESCE(SUM(j.negative_ratings), 0)) AS net_ratings
+FROM calendario c
+LEFT JOIN juegos j ON c.fecha = j.release_date
+GROUP BY c.fecha
+ORDER BY c.fecha;
+
+
+
+SELECT
+  c.fecha AS release_date,
+  COALESCE(SUM(j.positive_ratings), 0) AS total_positive_ratings,
+  COALESCE(SUM(j.negative_ratings), 0) AS total_negative_ratings,
+  (COALESCE(SUM(j.positive_ratings), 0) - COALESCE(SUM(j.negative_ratings), 0)) AS net_ratings,
+  ARRAY_AGG(DISTINCT j.categories) AS unique_categories
+FROM calendario c
+LEFT JOIN juegos j ON c.fecha = j.release_date
+WHERE j.positive_ratings IS NOT NULL OR j.negative_ratings IS NOT NULL
+GROUP BY c.fecha
+ORDER BY c.fecha;
+--
+CREATE VIEW juegos_time_series AS
+SELECT
+  c.fecha AS release_date,
+  COALESCE(SUM(j.positive_ratings), 0) AS total_positive_ratings,
+  COALESCE(SUM(j.negative_ratings), 0) AS total_negative_ratings,
+  (COALESCE(SUM(j.positive_ratings), 0) - COALESCE(SUM(j.negative_ratings), 0)) AS net_ratings,
+  ARRAY_AGG(DISTINCT j.categories) AS unique_categories,
+  c.trimestre
+FROM calendario c
+LEFT JOIN juegos j ON c.fecha = j.release_date
+WHERE j.positive_ratings IS NOT NULL OR j.negative_ratings IS NOT NULL
+GROUP BY c.fecha, c.trimestre
+ORDER BY c.fecha;
+---
+
+CREATE VIEW juegos_time_series AS
+SELECT
+  c.fecha AS release_date,
+  COALESCE(SUM(j.positive_ratings), 0) AS total_positive_ratings,
+  COALESCE(SUM(j.negative_ratings), 0) AS total_negative_ratings,
+  (COALESCE(AVG(j.positive_ratings), 0) - COALESCE(SUM(j.negative_ratings), 0)) AS net_ratings,
+  COALESCE(SUM(j.average_playtime), 0) AS total_average_playtime,
+  ARRAY_AGG(DISTINCT j.categories) AS unique_categories,
+  c.trimestre
+FROM calendario c
+LEFT JOIN juegos j ON c.fecha = j.release_date
+WHERE j.positive_ratings IS NOT NULL OR j.negative_ratings IS NOT NULL
+GROUP BY c.fecha, c.trimestre
+ORDER BY c.fecha;
+
+
+-- esta bien la view pero puede mejorar son rating positivo y negativo seguro que es un resta y tambien hay que incluir average_playtime, plaease generemos la view mejorada
+CREATE VIEW juegos_time_series AS
+SELECT
+  c.fecha AS release_date,
+  COALESCE(SUM(j.positive_ratings), 0) AS total_positive_ratings,
+  COALESCE(SUM(j.negative_ratings), 0) AS total_negative_ratings,
+  (COALESCE(SUM(j.positive_ratings), 0) - COALESCE(SUM(j.negative_ratings), 0)) AS net_ratings,
+  ARRAY_AGG(DISTINCT j.categories) AS unique_categories,
+  c.trimestre
+FROM calendario c
+LEFT JOIN juegos j ON c.fecha = j.release_date
+WHERE j.positive_ratings IS NOT NULL OR j.negative_ratings IS NOT NULL
+GROUP BY c.fecha, c.trimestre
+ORDER BY c.fecha;
+
+SELECT release_date, AVG(net_ratings) AS avg_net_ratings
+FROM juegos_time_series
+WHERE EXTRACT(YEAR FROM release_date) BETWEEN 2020 AND 2023
+GROUP BY release_date
+ORDER BY release_date;
+
+SELECT
+  release_date,
+  AVG(net_ratings) AS avg_net_ratings
+FROM juegos_time_series
+WHERE EXTRACT(YEAR FROM release_date) BETWEEN 2020 AND 2023
+GROUP BY release_date
+ORDER BY release_date;
+
+
+SELECT year_of_release, top_games, top_games_total_global, total_global_for_year 
+FROM topgamesperyearview LIMIT 50;
