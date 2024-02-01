@@ -1,30 +1,3 @@
--- Active: 1706639263610@@127.0.0.1@5433@docker@public
-
-
-CREATE TABLE video_games (
-    Name VARCHAR(255),
-    Platform VARCHAR(50),
-    Year_of_Release VARCHAR(50),
-    Genre VARCHAR(50),
-    Publisher VARCHAR(255),
-    NA_Sales VARCHAR(50),
-    EU_Sales VARCHAR(50),
-    JP_Sales VARCHAR(50),
-    Other_Sales VARCHAR(50),
-    Global_Sales VARCHAR(50),
-    Critic_Score  VARCHAR(50),
-    Critic_Count  VARCHAR(50),
-    User_Score VARCHAR(5),
-    User_Count VARCHAR(50),
-    Developer VARCHAR(255),
-    Rating VARCHAR(5)
-);
-
-COPY video_games
-FROM '/var/lib/postgresql/data/ivideosgame.csv'
-WITH CSV HEADER DELIMITER ',' QUOTE '"';
-
-
 
 -- TABLA world_indicators
 ALTER TABLE world_indicators 
@@ -1123,7 +1096,6 @@ JOIN pg_attribute a ON a.attnum = ANY(c.conkey)
 JOIN pg_attribute af ON af.attnum = ANY(c.confkey)
 WHERE contype = 'f';
 
-
 -- manejamos como una vista los años para wold_indicators
 CREATE VIEW world_years_unpivoted AS
 SELECT series_name, series_code, '2000' AS year, yr_2000 AS value FROM world_indicators
@@ -1166,13 +1138,23 @@ SELECT series_name, series_code, '2018' AS year, yr_2018 AS value FROM world_ind
 UNION ALL
 SELECT series_name, series_code, '2019' AS year, yr_2019 AS value FROM world_indicators;
 
+UPDATE video_games
+SET na_sales = COALESCE(na_sales, 0),
+    eu_sales = COALESCE(eu_sales, 0),
+    jp_sales = COALESCE(jp_sales, 0),
+    other_sales = COALESCE(other_sales, 0),
+    global_sales = COALESCE(global_sales, 0);
 
-SELECT
-    wi.series_name,
-    wi.series_code,
-    c.fecha,
-    wi.value
-FROM world_years_unpivoted wi
-JOIN calendario c ON wi.year::int = c.anio;
+-- Agregar la nueva columna
+ALTER TABLE video_games
+ADD COLUMN total_global NUMERIC;
+
+-- Actualizar la columna total_global con la condición especificada
+UPDATE video_games
+SET total_global = CASE
+                    WHEN global_sales IS NOT NULL THEN global_sales
+                    ELSE COALESCE(na_sales, 0) + COALESCE(eu_sales, 0) + COALESCE(jp_sales, 0) + COALESCE(other_sales, 0)
+                  END;
+
 
 
