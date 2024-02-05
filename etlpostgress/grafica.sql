@@ -273,7 +273,7 @@ GROUP BY c.fecha, c.trimestre
 ORDER BY c.fecha;
 
 
--- esta bien la view pero puede mejorar son rating positivo y negativo seguro que es un resta y tambien hay que incluir average_playtime, plaease generemos la view mejorada
+-- 
 CREATE VIEW juegos_time_series AS
 SELECT
   c.fecha AS release_date,
